@@ -1,87 +1,55 @@
-import { routePartykitRequest, Server } from "partyserver";
+import type { PartyKitServer, PartyKitConnection, PartyKitRoom } from "partykit/server";
 
-import type { OutgoingMessage, Position } from "../shared";
-import type { Connection, ConnectionContext } from "partyserver";
+// Define the structure for a player's state
+interface PlayerState {
+  id: string;
+  username: string;
+  position?: { x: number; y: number; z: number };
+}
 
-// This is the state that we'll store on each connection
-type ConnectionState = {
-  position: Position;
-};
+export default class GameServer implements PartyKitServer {
+  constructor(readonly room: PartyKitRoom) {}
 
-export class Globe extends Server {
-  onConnect(conn: Connection<ConnectionState>, ctx: ConnectionContext) {
-    // Whenever a fresh connection is made, we'll
-    // send the entire state to the new connection
+  // A simple in-memory map to store player states
+  players: Map<string, PlayerState> = new Map();
 
-    // First, let's extract the position from the Cloudflare headers
-    const latitude = ctx.request.cf?.latitude as string | undefined;
-    const longitude = ctx.request.cf?.longitude as string | undefined;
-    if (!latitude || !longitude) {
-      console.warn(`Missing position information for connection ${conn.id}`);
-      return;
+  onConnect(conn: PartyKitConnection) {
+    // When a new player connects, send them the current state of all other players
+    const players = Array.from(this.players.values());
+    conn.send(JSON.stringify({ type: "sync", players }));
+  }
+
+  onMessage(message: string, sender: PartyKitConnection) {
+    const msg = JSON.parse(message);
+
+    if (msg.type === "identify") {
+      // When a player sends their username, store it and broadcast their arrival
+      const newPlayer: PlayerState = { id: sender.id, username: msg.username };
+      this.players.set(sender.id, newPlayer);
+      sender.state = newPlayer; // Attach state to the connection for later reference
+
+      this.room.broadcast(
+        JSON.stringify({ type: "join", player: newPlayer }),
+        [sender.id] // Exclude the sender from this broadcast
+      );
     }
-    const position = {
-      lat: parseFloat(latitude),
-      lng: parseFloat(longitude),
-      id: conn.id,
-    };
-    // And save this on the connection's state
-    conn.setState({
-      position,
-    });
 
-    // Now, let's send the entire state to the new connection
-    for (const connection of this.getConnections<ConnectionState>()) {
-      try {
-        conn.send(
-          JSON.stringify({
-            type: "add-marker",
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            position: connection.state!.position,
-          } satisfies OutgoingMessage),
+    if (msg.type === "move") {
+      // When a player moves, update their position and broadcast it to others
+      const player = this.players.get(sender.id);
+      if (player) {
+        player.position = msg.position;
+        this.room.broadcast(
+          JSON.stringify({ type: "move", id: sender.id, position: msg.position }),
+          [sender.id]
         );
-
-        // And let's send the new connection's position to all other connections
-        if (connection.id !== conn.id) {
-          connection.send(
-            JSON.stringify({
-              type: "add-marker",
-              position,
-            } satisfies OutgoingMessage),
-          );
-        }
-      } catch {
-        this.onCloseOrError(conn);
       }
     }
   }
 
-  // Whenever a connection closes (or errors), we'll broadcast a message to all
-  // other connections to remove the marker.
-  onCloseOrError(connection: Connection) {
-    this.broadcast(
-      JSON.stringify({
-        type: "remove-marker",
-        id: connection.id,
-      } satisfies OutgoingMessage),
-      [connection.id],
-    );
-  }
-
-  onClose(connection: Connection): void | Promise<void> {
-    this.onCloseOrError(connection);
-  }
-
-  onError(connection: Connection): void | Promise<void> {
-    this.onCloseOrError(connection);
+  onClose(conn: PartyKitConnection) {
+    // When a player disconnects, remove them and notify others
+    this.players.delete(conn.id);
+    this.room.broadcast(JSON.stringify({ type: "leave", id: conn.id }));
   }
 }
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    return (
-      (await routePartykitRequest(request, { ...env })) ||
-      new Response("Not Found", { status: 404 })
-    );
-  },
-} satisfies ExportedHandler<Env>;

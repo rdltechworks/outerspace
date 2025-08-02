@@ -1,0 +1,9 @@
+<svg viewBox="0 0 300 300" width="300" height="300" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(27.5, 40)">
+    <rect class="shape shape-1" x="10" y="50" width="80" height="60" rx="30" ry="30" fill="#FACF27"/>
+    <rect class="shape shape-2" x="60" y="90" width="120" height="50" rx="25" ry="25" fill="#F89824"/>
+    <rect class="shape shape-3" x="90" y="150" width="80" height="60" rx="30" ry="30" fill="#A7CC53"/>
+    <rect class="shape shape-4" x="90" y="30" width="120" height="50" rx="25" ry="25" fill="#D53031"/>
+    <circle class="shape shape-5" cx="200" cy="130" r="35" fill="#9E53B2"/>
+  </g>
+</svg>
