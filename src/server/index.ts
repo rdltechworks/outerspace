@@ -31,8 +31,15 @@ export interface GameAction {
   timestamp: number;
 }
 
+// Define environment interface
+interface Env {
+  AI: any;
+  GAME_STATE?: KVNamespace;
+}
+
+// Main export with proper Worker interface
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     
     // CORS headers for all responses
@@ -91,12 +98,18 @@ export default {
     }
 
     // Route PartyKit requests for multiplayer
-    return (
-      (await routePartykitRequest(request, { ...env })) ||
-      new Response("Not Found", { status: 404, headers: corsHeaders })
-    );
+    try {
+      const partyResponse = await routePartykitRequest(request, { ...env });
+      if (partyResponse) {
+        return partyResponse;
+      }
+    } catch (error) {
+      console.error("PartyKit routing error:", error);
+    }
+
+    return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
-} satisfies ExportedHandler<Env>;
+};
 
 /**
  * Handle API requests for game functionality
