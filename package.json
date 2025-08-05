@@ -44,8 +44,6 @@
     "deploy": "wrangler deploy",
     "start": "npm run build && npx wrangler dev",
     "build": "npx esbuild src/client/index.tsx --bundle --outdir=public/dist --splitting --sourcemap --format=esm",
-    "test": "jest",
-    "predeploy": "wrangler d1 migrations apply DB --remote",
-    "seedLocalD1": "wrangler d1 migrations apply DB --local"
+    "test": "jest"
   }
 }
